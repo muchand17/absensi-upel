@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Absensi Mixue</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        /* --- CSS UTAMA --- */
+        /* --- CSS UTAMA (Punya lu tetep gua pake) --- */
         body {
             font-family: 'Segoe UI', sans-serif;
             background-color: #121212;
@@ -40,13 +41,16 @@
             border: none; border-radius: 8px; color: white;
             font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px;
         }
+        .btn-scan:disabled {
+            background: #555; cursor: not-allowed;
+        }
 
         /* --- CSS POP-UP KAMERA (MODAL) --- */
         #camera-modal {
-            display: none; /* Sembunyi dulu */
+            display: none; 
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.95); /* Gelap total belakangnya */
+            background-color: rgba(0,0,0,0.95);
             z-index: 9999;
             flex-direction: column;
             align-items: center;
@@ -72,36 +76,40 @@
 <body>
 
 <div class="app-container">
-    <h2>Absensi Lab</h2>
+    <h2>Absensi Lab Mixue</h2>
 
-    <div class="form-group">
-        <label>Nama Lengkap</label>
-        <input type="text" id="nama" placeholder="Contoh : Gibran cahaya Asia">
-    </div>
+    <form id="formAbsen" onsubmit="event.preventDefault();">
+        <div class="form-group">
+            <label>Nama Lengkap</label>
+            <input type="text" id="nama" name="nama" placeholder="Contoh : Gibran cahaya Asia">
+        </div>
 
-    <div class="form-group">
-        <label>Status</label>
-        <select id="status">
-            <option value="Masuk">🟢 Masuk Shift</option>
-            <option value="Pulang">🔴 Pulang Shift</option>
-        </select>
-    </div>
+        <div class="form-group">
+            <label>Status</label>
+            <select id="status" name="status">
+                <option value="Masuk">🟢 Masuk Shift</option>
+                <option value="Pulang">🔴 Pulang Shift</option>
+            </select>
+        </div>
 
-    <div class="form-group">
-        <label>Shift Ke-</label>
-        <select id="shift">
-            <option value="1">Shift 1 (Pagi)</option>
-            <option value="2">Shift 2 (Siang)</option>
-            <option value="3">Lembur / Ganti</option>
-        </select>
-    </div>
+        <div class="form-group">
+            <label>Shift Ke-</label>
+            <select id="shift" name="shift">
+                <option value="1">Shift 1 (Pagi)</option>
+                <option value="2">Shift 2 (Siang)</option>
+                <option value="3">Lembur / Ganti</option>
+            </select>
+        </div>
 
-    <div class="form-group">
-        <label>Jam</label>
-        <input type="text" id="waktu" readonly style="background: #333; color: #888;">
-    </div>
+        <div class="form-group">
+            <label>Jam</label>
+            <input type="text" id="waktu" name="waktu" readonly style="background: #333; color: #888;">
+        </div>
+        
+        <input type="hidden" id="qrData" name="qrData">
 
-    <button class="btn-scan" onclick="bukaKamera()">📷 Scan QR</button>
+        <button class="btn-scan" onclick="bukaKamera()">📷 Scan QR & Absen</button>
+    </form>
 </div>
 
 <div id="camera-modal">
@@ -119,27 +127,23 @@
     setInterval(updateJam, 1000);
     updateJam();
 
-    // --- VARIABLE GLOBAL (State Management) ---
+    // --- VARIABLE GLOBAL ---
     let html5QrCode;
-    let isProcessing = false; // KUNCI UTAMA BIAR GAK SPAM
+    let isProcessing = false;
 
-    // --- FUNGSI BUKA KAMERA (MODAL) ---
+    // --- FUNGSI BUKA KAMERA ---
     function bukaKamera() {
         const nama = document.getElementById('nama').value;
         if (!nama) { alert("Isi nama dulu bre!"); return; }
 
-        // Munculin Modal
         document.getElementById('camera-modal').style.display = 'flex';
-        
-        // Reset kunci
         isProcessing = false;
 
-        // Start Library Kamera
         html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start(
             { facingMode: "environment" }, 
             { fps: 10, qrbox: { width: 250, height: 250 } },
-            onScanSuccess // Kalau berhasil, panggil fungsi ini
+            onScanSuccess
         ).catch(err => {
             alert("Kamera error: " + err);
             tutupKamera();
@@ -161,93 +165,47 @@
         }
     }
 
-    // --- FUNGSI SAAT QR KEBACA (LOGIC INTI) ---
+    // --- FUNGSI SAAT QR KEBACA ---
     function onScanSuccess(decodedText, decodedResult) {
-        // CEK KUNCI: Kalau lagi proses, jangan ngapa-ngapain (Anti Spam)
         if (isProcessing) return;
-        
-        // KUNCI LANGSUNG DIPASANG
         isProcessing = true; 
         
-        // Stop Kamera dulu biar user tau udah sukses scan
+        // Simpan hasil scan ke hidden input
+        document.getElementById('qrData').value = decodedText;
+
         tutupKamera();
-        
-        // Proses Kirim Data
-        kirimData(decodedText);
+        kirimDataGoogleScript(); // Panggil fungsi kirim yang baru
     }
 
-    // --- FUNGSI KIRIM DATA (FETCH) ---
-    function kirimData(urlScript) {
-        // Feedback Visual (Loading)
+    // --- FUNGSI KIRIM DATA (PAKE APPS SCRIPT NATIVE) ---
+    // Ini pengganti Fetch yang lu maki-maki tadi
+    function kirimDataGoogleScript() {
         const btn = document.querySelector('.btn-scan');
-        btn.innerHTML = "⏳ Sedang Mengirim...";
+        const formObject = document.getElementById('formAbsen'); // Ambil semua data di form
+
+        btn.innerHTML = "⏳ Mengirim ke Server...";
         btn.disabled = true;
 
-        const dataAbsen = {
-            nama: document.getElementById('nama').value,
-            status: document.getElementById('status').value,
-            shift: document.getElementById('shift').value,
-            waktu: document.getElementById('waktu').value
-        };
-
-        // TEKNIK KIRIM DATA TEXT/PLAIN (Biar ga diblokir Google Script)
-        fetch(urlScript, {
-            method: "POST",
-            mode: "no-cors", // Wajib buat Google Script
-            headers: {
-                "Content-Type": "text/plain" // Tips: Pake text/plain lebih aman daripada application/json
-            },
-            body: JSON.stringify(dataAbsen)
-        })
-        .then(() => {
-            // Karena no-cors, kita ASUMSIKAN sukses kalau fetch selesai tanpa error network
-            alert("✅ Data " + dataAbsen.nama + " Berhasil Masuk!");
-            window.location.reload(); // Refresh halaman
-        })
-        .catch(error => {
-            alert("❌ Error: " + error);
-            btn.innerHTML = "📷 Scan QR";
-            btn.disabled = false;
-            isProcessing = false; // Buka kunci kalau error biar bisa coba lagi
-        });
-    }
-
-// --- FUNGSI KIRIM DATA (FINAL VERSION) ---
-    function kirimData(urlScript) {
-        const btn = document.querySelector('.btn-scan');
-        btn.innerHTML = "⏳ Mengirim...";
-        btn.disabled = true;
-
-        const dataAbsen = {
-            nama: document.getElementById('nama').value,
-            status: document.getElementById('status').value,
-            shift: document.getElementById('shift').value,
-            waktu: document.getElementById('waktu').value
-        };
-
-        // PENTING: Gunakan text/plain biar lolos sensor Google
-        fetch(urlScript, {
-            method: "POST",
-            mode: "no-cors", 
-            headers: {
-                "Content-Type": "text/plain" 
-            },
-            body: JSON.stringify(dataAbsen)
-        })
-        .then(() => {
-            // Karena no-cors, kita anggap sukses kalau request terkirim
-            alert("✅ ABSEN MASUK!\nNama: " + dataAbsen.nama + "\nStatus: " + dataAbsen.status);
-            window.location.reload(); 
-        })
-        .catch(error => {
-            alert("❌ Gagal: " + error);
-            btn.innerHTML = "📷 Scan QR";
-            btn.disabled = false;
-            isProcessing = false;
-        });
+        // PANGGIL BACKEND (Code.gs)
+        google.script.run
+            .withSuccessHandler(function(response) {
+                // Kalo SUKSES
+                alert("✅ MANTAP! " + response);
+                btn.innerHTML = "📷 Scan QR & Absen";
+                btn.disabled = false;
+                document.getElementById('formAbsen').reset(); // Reset form
+                updateJam(); // Balikin jam
+            })
+            .withFailureHandler(function(error) {
+                // Kalo ERROR
+                alert("❌ GOBLOK ERROR: " + error.message);
+                btn.innerHTML = "📷 Scan QR & Absen";
+                btn.disabled = false;
+                isProcessing = false; // Reset kunci biar bisa scan lagi
+            })
+            .prosesAbsensi(formObject); // Nama fungsi di Code.gs harus 'prosesAbsensi'
     }
 </script>
 
 </body>
 </html>
-
