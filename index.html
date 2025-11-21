@@ -2,24 +2,23 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Absensi LAB</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Absensi Mixue</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        /* --- CSS: BIAR TAMPILAN KAYAK APP (User Interface) --- */
+        /* --- CSS UTAMA --- */
         body {
             font-family: 'Segoe UI', sans-serif;
-            background-color: #121212; /* Dark Mode */
+            background-color: #121212;
             color: #e0e0e0;
             margin: 0;
             padding: 20px;
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            justify-content: center;
         }
         .app-container {
             width: 100%;
-            max-width: 400px; /* Ukuran HP */
+            max-width: 400px;
             background-color: #1e1e1e;
             padding: 20px;
             border-radius: 15px;
@@ -27,40 +26,47 @@
         }
         h2 { text-align: center; color: #bb86fc; margin-bottom: 20px; }
         
-        /* Input Form Styling */
         .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-size: 0.9em; color: #aaa; }
+        label { display: block; margin-bottom: 5px; color: #aaa; }
         input, select {
-            width: 100%;
-            padding: 12px;
-            background: #2c2c2c;
-            border: 1px solid #333;
-            border-radius: 8px;
-            color: white;
-            font-size: 16px;
-            box-sizing: border-box; /* Biar padding ga ngerusak lebar */
+            width: 100%; padding: 12px; background: #2c2c2c;
+            border: 1px solid #333; border-radius: 8px; color: white;
+            font-size: 16px; box-sizing: border-box;
         }
         
-        /* Tombol Utama */
         .btn-scan {
-            width: 100%;
-            padding: 15px;
+            width: 100%; padding: 15px;
             background: linear-gradient(45deg, #bb86fc, #3700b3);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
+            border: none; border-radius: 8px; color: white;
+            font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px;
         }
-        .btn-scan:active { transform: scale(0.98); }
 
-        /* Area Kamera (Hidden dulu sebelum dipanggil) */
-        #reader { width: 100%; margin-top: 20px; border-radius: 10px; overflow: hidden; }
+        /* --- CSS POP-UP KAMERA (MODAL) --- */
+        #camera-modal {
+            display: none; /* Sembunyi dulu */
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.95); /* Gelap total belakangnya */
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
         
-        /* Status Loading/Sukses */
-        #status-msg { text-align: center; margin-top: 15px; font-size: 0.9em; }
+        #reader {
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #bb86fc;
+            border-radius: 10px;
+        }
+
+        .btn-close {
+            margin-top: 20px;
+            padding: 10px 30px;
+            background: #cf6679;
+            color: white; border: none; border-radius: 50px;
+            font-size: 16px; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -70,7 +76,7 @@
 
     <div class="form-group">
         <label>Nama Lengkap</label>
-        <input type="text" id="nama" placeholder="Contoh: Gibran Cahaya Asia">
+        <input type="text" id="nama" placeholder="Contoh : Gibran cahaya Asia">
     </div>
 
     <div class="form-group">
@@ -91,98 +97,118 @@
     </div>
 
     <div class="form-group">
-        <label>Waktu Absen (Jam Saat Ini)</label>
+        <label>Jam</label>
         <input type="text" id="waktu" readonly style="background: #333; color: #888;">
     </div>
 
-    <button class="btn-scan" onclick="mulaiScan()">📷 Scan QR & Kirim</button>
+    <button class="btn-scan" onclick="bukaKamera()">📷 Scan QR</button>
+</div>
 
+<div id="camera-modal">
+    <div style="color: white; margin-bottom: 10px;">Arahkan ke QR Code Tembok</div>
     <div id="reader"></div>
-    <div id="status-msg"></div>
+    <button class="btn-close" onclick="tutupKamera()">Batal</button>
 </div>
 
 <script>
-    // --- MATERI: PRE-PROCESSING DATA ---
-    // Otomatis isi jam saat ini biar user ga repot (User Experience)
+    // --- LOGIC JAM OTOMATIS ---
     function updateJam() {
         const now = new Date();
-        // Format HH:MM
-        const jamStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
-        document.getElementById('waktu').value = jamStr;
+        document.getElementById('waktu').value = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
     }
-    setInterval(updateJam, 1000); // Update tiap detik
+    setInterval(updateJam, 1000);
     updateJam();
 
-    // --- FUNGSI UTAMA: SCAN QR ---
-    function mulaiScan() {
-        // Validasi Input dulu (Error Handling Sederhana)
+    // --- VARIABLE GLOBAL (State Management) ---
+    let html5QrCode;
+    let isProcessing = false; // KUNCI UTAMA BIAR GAK SPAM
+
+    // --- FUNGSI BUKA KAMERA (MODAL) ---
+    function bukaKamera() {
         const nama = document.getElementById('nama').value;
-        if (!nama) {
-            alert("Isi nama dulu lahhhh!");
-            return;
-        }
+        if (!nama) { alert("Isi nama dulu bre!"); return; }
 
-        const html5QrCode = new Html5Qrcode("reader");
-        document.getElementById('status-msg').innerText = "Arahkan kamera ke QR Code di tembok...";
-
-        // Config kamera
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        // Munculin Modal
+        document.getElementById('camera-modal').style.display = 'flex';
         
-        // Start Kamera
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+        // Reset kunci
+        isProcessing = false;
+
+        // Start Library Kamera
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            onScanSuccess // Kalau berhasil, panggil fungsi ini
+        ).catch(err => {
+            alert("Kamera error: " + err);
+            tutupKamera();
+        });
     }
 
-    // --- MATERI: CALLBACK FUNCTION ---
-    // Fungsi ini cuma jalan KALO QR berhasil kebaca
-    function onScanSuccess(decodedText, decodedResult) {
-        // 1. Stop Kamera biar hemat batre
-        // html5QrCode.stop(); (Harusnya distop, tapi kita perlu handle object-nya dulu, anggap stop manual by refresh or logic)
-        // Kita reload halaman setelah sukses nanti.
+    // --- FUNGSI TUTUP KAMERA ---
+    function tutupKamera() {
+        if (html5QrCode) {
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                document.getElementById('camera-modal').style.display = 'none';
+            }).catch(err => {
+                console.log("Stop failed", err);
+                document.getElementById('camera-modal').style.display = 'none';
+            });
+        } else {
+            document.getElementById('camera-modal').style.display = 'none';
+        }
+    }
 
-        document.getElementById('status-msg').innerText = "QR Terbaca! Mengirim data...";
+    // --- FUNGSI SAAT QR KEBACA (LOGIC INTI) ---
+    function onScanSuccess(decodedText, decodedResult) {
+        // CEK KUNCI: Kalau lagi proses, jangan ngapa-ngapain (Anti Spam)
+        if (isProcessing) return;
         
-        // decodedText = URL SCRIPT GOOGLE SHEET lu yang ada di QR Code
-        // Inilah "Key" nya.
+        // KUNCI LANGSUNG DIPASANG
+        isProcessing = true; 
+        
+        // Stop Kamera dulu biar user tau udah sukses scan
+        tutupKamera();
+        
+        // Proses Kirim Data
         kirimData(decodedText);
     }
 
-    // --- MATERI: HTTP REQUEST & ASYNCHRONOUS (AJAX/FETCH) ---
+    // --- FUNGSI KIRIM DATA (FETCH) ---
     function kirimData(urlScript) {
-        
-        // 1. DATA BINDING (Mengikat data form ke variabel)
-        const namaUser = document.getElementById('nama').value;
-        const statusUser = document.getElementById('status').value;
-        const shiftUser = document.getElementById('shift').value;
-        const waktuUser = document.getElementById('waktu').value;
+        // Feedback Visual (Loading)
+        const btn = document.querySelector('.btn-scan');
+        btn.innerHTML = "⏳ Sedang Mengirim...";
+        btn.disabled = true;
 
-        // 2. OBJECT CREATION (Struktur Data Inti)
-        // Kita bungkus semua data jadi satu Object JS
         const dataAbsen = {
-            nama: namaUser,
-            status: statusUser,
-            shift: shiftUser,
-            waktu: waktuUser
+            nama: document.getElementById('nama').value,
+            status: document.getElementById('status').value,
+            shift: document.getElementById('shift').value,
+            waktu: document.getElementById('waktu').value
         };
 
-        // 3. SENDING DATA (POST Request)
-        // fetch() adalah cara modern kirim data di JS
+        // TEKNIK KIRIM DATA TEXT/PLAIN (Biar ga diblokir Google Script)
         fetch(urlScript, {
             method: "POST",
-            // mode: "no-cors" PENTING buat Google Script biar ga kena blokir browser
-            mode: "no-cors", 
+            mode: "no-cors", // Wajib buat Google Script
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "text/plain" // Tips: Pake text/plain lebih aman daripada application/json
             },
-            // Konversi Object -> String JSON
             body: JSON.stringify(dataAbsen)
         })
         .then(() => {
-            // Feedback ke User
-            alert("✅ Absen Berhasil Masuk, Bre! Selamat bekerja/istirahat.");
+            // Karena no-cors, kita ASUMSIKAN sukses kalau fetch selesai tanpa error network
+            alert("✅ Data " + dataAbsen.nama + " Berhasil Masuk!");
             window.location.reload(); // Refresh halaman
         })
         .catch(error => {
-            alert("❌ Gagal kirim: " + error);
+            alert("❌ Error: " + error);
+            btn.innerHTML = "📷 Scan QR";
+            btn.disabled = false;
+            isProcessing = false; // Buka kunci kalau error biar bisa coba lagi
         });
     }
 </script>
