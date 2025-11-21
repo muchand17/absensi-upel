@@ -211,7 +211,43 @@
             isProcessing = false; // Buka kunci kalau error biar bisa coba lagi
         });
     }
+
+// --- FUNGSI KIRIM DATA (FINAL VERSION) ---
+    function kirimData(urlScript) {
+        const btn = document.querySelector('.btn-scan');
+        btn.innerHTML = "⏳ Mengirim...";
+        btn.disabled = true;
+
+        const dataAbsen = {
+            nama: document.getElementById('nama').value,
+            status: document.getElementById('status').value,
+            shift: document.getElementById('shift').value,
+            waktu: document.getElementById('waktu').value
+        };
+
+        // PENTING: Gunakan text/plain biar lolos sensor Google
+        fetch(urlScript, {
+            method: "POST",
+            mode: "no-cors", 
+            headers: {
+                "Content-Type": "text/plain" 
+            },
+            body: JSON.stringify(dataAbsen)
+        })
+        .then(() => {
+            // Karena no-cors, kita anggap sukses kalau request terkirim
+            alert("✅ ABSEN MASUK!\nNama: " + dataAbsen.nama + "\nStatus: " + dataAbsen.status);
+            window.location.reload(); 
+        })
+        .catch(error => {
+            alert("❌ Gagal: " + error);
+            btn.innerHTML = "📷 Scan QR";
+            btn.disabled = false;
+            isProcessing = false;
+        });
+    }
 </script>
 
 </body>
 </html>
+
